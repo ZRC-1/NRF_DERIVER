@@ -1,0 +1,34 @@
+{
+    "configurations": [
+        {
+            "name": "nRF Connect",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/build/hellow_word/zephyr/include/generated/zephyr",
+                "C:/ncs/v3.2.1/zephyr/include",
+                "${workspaceFolder}/build/hellow_word/zephyr/include/generated",
+                "C:/ncs/v3.2.1/zephyr/soc/nordic",
+                "C:/ncs/v3.2.1/zephyr/soc/nordic/nrf52",
+                "C:/ncs/v3.2.1/zephyr/soc/nordic/common",
+                "C:/ncs/v3.2.1/nrf/include",
+                "C:/ncs/v3.2.1/modules/hal/cmsis_6/CMSIS/Core/Include",
+                "C:/ncs/v3.2.1/modules/hal/nordic/nrfx",
+                "C:/ncs/v3.2.1/modules/hal/nordic/nrfx/drivers/include",
+                "C:/ncs/v3.2.1/zephyr/lib/libc/common/include",
+                "C:/ncs/toolchains/66cdf9b75e/opt/zephyr-sdk/arm-zephyr-eabi/arm-zephyr-eabi/include"
+            ],
+            "defines": [
+                "KERNEL",
+                "NRF52840_XXAA",
+                "__ZEPHYR__=1"
+            ],
+            "compilerPath": "C:/ncs/toolchains/66cdf9b75e/opt/zephyr-sdk/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc.exe",
+            "cStandard": "c99",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-arm",
+            "compileCommands": "${workspaceFolder}/build/hellow_word/compile_commands.json",
+            "configurationProvider": "ms-vscode.cmake-tools"
+        }
+    ],
+    "version": 4
+}

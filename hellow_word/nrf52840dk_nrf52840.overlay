@@ -36,6 +36,16 @@
 	status = "disabled";
 };
 
+/* 禁用NFC功能，释放P0.09和P0.10引脚 */
+&nfct {
+	status = "disabled";
+};
+
+/* 配置UICR，将P0.09和P0.10设置为普通GPIO而非NFC引脚 */
+&uicr {
+	nfct-pins-as-gpios;  /* 将NFC引脚(P0.09和P0.10)配置为普通GPIO */
+};
+
 &button0 {
 	gpios = <&gpio0 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 };
@@ -86,11 +96,10 @@
 };
 
 &led1 {
-	gpios = <&gpio0 14 0>;
+	gpios = <&gpio0 15 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 };
 
-/ {
-	aliases {
-		sw0 = &button0;
-	};
+
+&led2 {
+	gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
 };

@@ -1,0 +1,21 @@
+CompileFlags:
+  CompilationDatabase: build/hellow_word
+  Add:
+    - -D__ZEPHYR__=1
+    - -DKERNEL
+    - -DNRF52840_XXAA
+  Remove:
+    - -mthumb
+    - -mabi=aapcs
+    - -mcpu=cortex-m4
+    - -mfp16-format=ieee
+    - -mtp=soft
+    - --sysroot=*
+    - -fmacro-prefix-map=*
+    - -specs=picolibc.specs
+    - -fno-defer-pop
+    - --param=min-pagesize=0
+
+Diagnostics:
+  UnusedIncludes: None
+  MissingIncludes: None
