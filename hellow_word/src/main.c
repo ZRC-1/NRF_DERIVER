@@ -1,26 +1,79 @@
-#include <zephyr/kernel.h>
-#include <stdio.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/kernel.h>
+#include <zephyr/drivers/uart.h>
+#include <strings.h>
 
 #define BUTTON_NODE DT_ALIAS(user_key_1)
 //#define BUTTON_NODE  DT_NODELABEL(button0)
 #define LED_NODE DT_NODELABEL(led0)
 //#define LED1_NODE DT_NODELABEL(led1)
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
-
 static struct gpio_dt_spec button_struct = GPIO_DT_SPEC_GET(BUTTON_NODE, gpios);
 static struct gpio_dt_spec led_struct = GPIO_DT_SPEC_GET(LED_NODE, gpios);
 static struct gpio_callback button_callback_struct;
 // struct gpio_dt_spec led1_struct = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 
-uint8_t int_flag=0;
-//botton0 IO�жϻص�����
+uint8_t int_flag = 0;
+uint8_t uart1_rx_buf[128] = {0};    // 接收缓冲区
+uint8_t uart1_tx_buf[128] = {0};    // 发送缓冲区，独立存储
+bool tx_busy = false;               // 发送忙标志
+
+#define UART1_NODE DT_ALIAS(uart1_use_protocol)
+static const struct device *const uart1_dev = DEVICE_DT_GET(UART1_NODE);
+
+void UART1_CALLBACK(const struct device *dev, struct uart_event *evt, void *user_data)
+{
+        switch (evt->type) {
+        case UART_RX_RDY:
+                // RX超时触发，复制数据到发送缓冲区并发送
+                if (evt->data.rx.len > 0 && !tx_busy) {
+                        LOG_INF("RX timeout: %d bytes, sending back", evt->data.rx.len);
+                        
+                        // 复制数据到发送缓冲区
+                        memcpy(uart1_tx_buf, &evt->data.rx.buf[evt->data.rx.offset], 
+                               evt->data.rx.len);
+                        
+                        // 发送数据
+                        tx_busy = true;
+                        uart_tx(dev, uart1_tx_buf, evt->data.rx.len, SYS_FOREVER_MS);
+                }
+                break;
+
+        case UART_RX_BUF_REQUEST:
+                // memset(uart1_tx_buf, 0, sizeof(uart1_tx_buf));
+                // uart_rx_enable(dev, uart1_rx_buf, sizeof(uart1_rx_buf), 500);
+                break;
+
+        case UART_RX_DISABLED:
+                // 接收被禁用
+                LOG_DBG("RX disabled");
+                break;
+
+        case UART_TX_DONE:
+                // 发送完成，清空缓冲区并重启接收
+                LOG_DBG("TX done: %d bytes", evt->data.tx.len);
+                tx_busy = false;
+                memset(uart1_rx_buf, 0, sizeof(uart1_rx_buf));
+                memset(uart1_tx_buf, 0, sizeof(uart1_tx_buf));
+                uart_rx_enable(dev, uart1_rx_buf, sizeof(uart1_rx_buf), 500);
+                break;
+
+        case UART_TX_ABORTED:
+                // 发送中止
+                LOG_WRN("TX aborted");
+                break;
+
+        default:
+                break;
+        }
+}
+
 void gpio_callback(const struct device *port,struct gpio_callback *cb,gpio_port_pins_t pins)
 {
         if(pins==BIT(button_struct.pin))
         {
-                printk("Button pressed!\n");
+                LOG_DBG("Button pressed");
                 int_flag=1;
         }
 }
@@ -29,14 +82,14 @@ void gpio_callback(const struct device *port,struct gpio_callback *cb,gpio_port_
 int main(void)
 {
         int ret;
-        printk("Hello World! Running on %s\n", CONFIG_BOARD_TARGET);
+        LOG_INF("Hello World! Running on %s", CONFIG_BOARD_TARGET);
         if(gpio_is_ready_dt(&button_struct)==false)
         {
-                printk("button_init_flase");
+                LOG_ERR("button_init_failed");
         }
         if(gpio_is_ready_dt(&led_struct)==false)
         {
-                printk("led_init_flase");
+                LOG_ERR("led_init_failed");
         }
         // if(gpio_is_ready_dt(&led1_struct)==false)
         // {
@@ -46,12 +99,12 @@ int main(void)
         ret=gpio_pin_configure_dt(&led_struct, GPIO_OUTPUT|GPIO_ACTIVE_HIGH);        
         if(ret<0)
         {
-                printk("gpio_pin_configure failed: ret=%d\n", ret);
+                LOG_ERR("gpio_pin_configure failed: ret=%d", ret);
         }
         ret=gpio_pin_configure_dt(&button_struct, GPIO_INPUT|GPIO_ACTIVE_HIGH);
         if(ret<0)
         {
-                printk("gpio_pin_configure failed: ret=%d\n",ret);
+                LOG_ERR("gpio_pin_configure failed: ret=%d", ret);
         }
         // ret=gpio_pin_configure_dt(&led1_struct, GPIO_OUTPUT);
         // if(ret<0)
@@ -61,30 +114,48 @@ int main(void)
         ret=gpio_pin_interrupt_configure_dt(&button_struct, GPIO_INT_EDGE_TO_ACTIVE);
         if(ret<0)
         {
-                printk("button_int_config_flase");
+                LOG_ERR("button_int_config_failed");
         }
         gpio_init_callback(&button_callback_struct, gpio_callback, BIT(button_struct.pin));
         ret=gpio_add_callback_dt(&button_struct,&button_callback_struct);
         if (ret<0)
         {
-                printk("button_int_add_flase");
+                LOG_ERR("button_int_add_failed");
         }
+        //串口初始化
+        if (!device_is_ready(uart1_dev)) {
+                LOG_ERR("UART device not ready");
+                return -1;
+        }
+        
+        LOG_INF("UART1 device ready");
+        
+        ret = uart_callback_set(uart1_dev, UART1_CALLBACK, NULL);
+        if (ret < 0) {
+                LOG_ERR("uart_callback_set failed: %d", ret);
+                return -1;
+        }
+        
+        ret = uart_rx_enable(uart1_dev, uart1_rx_buf, sizeof(uart1_rx_buf), 500);
+        if (ret < 0) {
+                LOG_ERR("uart_rx_enable failed: %d", ret);
+                return -1;
+        }
+        
+        LOG_INF("UART1 initialized successfully");
 
         // gpio_pin_set_dt(&led1_struct,1);
         gpio_pin_set_dt(&led_struct,1);
         while (1)
         {
-                // gpio_pin_get_dt() �����߼���ƽ������ACTIVE_LOW��
-                // gpio_pin_get_raw() ����������ƽ��������ACTIVE_LOW��
-                int logical_state = gpio_pin_get_dt(&button_struct);
-                int physical_state = gpio_pin_get_raw(button_struct.port, button_struct.pin);
-                LOG_INF("logical=%d, physical=%d\n", logical_state, physical_state);
+                // int logical_state = gpio_pin_get_dt(&button_struct);
+                // int physical_state = gpio_pin_get_raw(button_struct.port, button_struct.pin);
+                // LOG_INF("logical=%d, physical=%d\n", logical_state, physical_state);
                 //printk("button_struct.pin=%d\n",button_struct.pin);
-                k_sleep(K_MSEC(1000));
+                k_sleep(K_MSEC(100));
                 if(int_flag==1)
                 {
                         int_flag=0;
-                        LOG_INF("int_flag=1\n");  
                 }
         }
         return 0;       

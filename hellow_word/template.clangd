@@ -1,0 +1,8 @@
+# 项目级 clangd 配置模板（最小化版本）
+# 复制此文件到新项目根目录并重命名为 .clangd
+# Add/Remove 规则继承自全局配置 ~/.clangd
+
+CompileFlags:
+  # 只需指定 compile_commands.json 的位置
+  # 将 your_project_name 替换为实际项目名称
+  CompilationDatabase: build/your_project_name

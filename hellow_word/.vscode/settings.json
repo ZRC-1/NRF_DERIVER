@@ -1,11 +1,13 @@
 {
-    "files.encoding": "gb2312",
-    "kiroAgent.configureMCP": "Disabled",
-    "nrf-connect.applications": [],
-    "clangd.arguments": [
-        "--compile-commands-dir=${workspaceFolder}/build/hellow_word",
-        "--background-index",
-        "--clang-tidy",
-        "--header-insertion=never"
-    ]
-}
+    "nrf-connect.applications": []
+} // {
+//     "files.encoding": "gb2312",
+//     "kiroAgent.configureMCP": "Disabled",
+//     "nrf-connect.applications": [],
+//     "clangd.arguments": [
+//         "--compile-commands-dir=${workspaceFolder}/build/hellow_word",
+//         "--background-index",
+//         "--clang-tidy",
+//         "--header-insertion=never"
+//     ]
+// }
