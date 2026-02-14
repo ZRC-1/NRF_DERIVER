@@ -2,16 +2,19 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/uart.h>
+#include <zephyr/drivers/i2c.h>
 #include <strings.h>
 
 #define BUTTON_NODE DT_ALIAS(user_key_1)
 //#define BUTTON_NODE  DT_NODELABEL(button0)
 #define LED_NODE DT_NODELABEL(led0)
+
 //#define LED1_NODE DT_NODELABEL(led1)
 LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG);
 static struct gpio_dt_spec button_struct = GPIO_DT_SPEC_GET(BUTTON_NODE, gpios);
 static struct gpio_dt_spec led_struct = GPIO_DT_SPEC_GET(LED_NODE, gpios);
 static struct gpio_callback button_callback_struct;
+
 // struct gpio_dt_spec led1_struct = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 
 uint8_t int_flag = 0;
@@ -19,6 +22,58 @@ uint8_t uart1_rx_buf[128] = {0};    // 接收缓冲区
 uint8_t uart1_tx_buf[128] = {0};    // 发送缓冲区，独立存储
 bool tx_busy = false;               // 发送忙标志
 
+///配置i2c
+#define I2C_NODE DT_ALIAS(user_i2c)
+static const struct device *const i2c_dev = DEVICE_DT_GET(I2C_NODE);
+static char last_byte;
+// I2C Target 回调函数
+static int sample_target_write_requested_cb(struct i2c_target_config *config)
+{
+	LOG_INF("I2C target write requested");
+	return 0;
+}
+
+static int sample_target_write_received_cb(struct i2c_target_config *config, uint8_t val)
+{
+	LOG_INF("I2C target write received: 0x%02x", val);
+	last_byte = val;
+	return 0;
+}
+
+static int sample_target_read_requested_cb(struct i2c_target_config *config, uint8_t *val)
+{
+	LOG_INF("I2C target read requested");
+	*val = last_byte;
+	return 0;
+}
+
+static int sample_target_read_processed_cb(struct i2c_target_config *config, uint8_t *val)
+{
+	LOG_INF("I2C target read processed");
+	*val = last_byte + 1;
+	return 0;
+}
+
+static int sample_target_stop_cb(struct i2c_target_config *config)
+{
+	LOG_INF("I2C target stop");
+	return 0;
+}
+
+static const struct i2c_target_callbacks sample_target_callbacks = {
+	.write_requested = sample_target_write_requested_cb,
+	.write_received = sample_target_write_received_cb,
+	.read_requested = sample_target_read_requested_cb,
+	.read_processed = sample_target_read_processed_cb,
+	.stop = sample_target_stop_cb,
+};
+
+static struct i2c_target_config user_target_config = {
+	.address = 0x12,
+	.callbacks = &sample_target_callbacks,
+};
+
+//配置串口
 #define UART1_NODE DT_ALIAS(uart1_use_protocol)
 static const struct device *const uart1_dev = DEVICE_DT_GET(UART1_NODE);
 
@@ -27,7 +82,8 @@ void UART1_CALLBACK(const struct device *dev, struct uart_event *evt, void *user
         switch (evt->type) {
         case UART_RX_RDY:
                 // RX超时触发，复制数据到发送缓冲区并发送
-                if (evt->data.rx.len > 0 && !tx_busy) {
+                if (evt->data.rx.len > 0 && !tx_busy) 
+                {
                         LOG_INF("RX timeout: %d bytes, sending back", evt->data.rx.len);
                         
                         // 复制数据到发送缓冲区
@@ -127,32 +183,39 @@ int main(void)
                 LOG_ERR("UART device not ready");
                 return -1;
         }
-        
         LOG_INF("UART1 device ready");
-        
         ret = uart_callback_set(uart1_dev, UART1_CALLBACK, NULL);
         if (ret < 0) {
                 LOG_ERR("uart_callback_set failed: %d", ret);
                 return -1;
         }
-        
         ret = uart_rx_enable(uart1_dev, uart1_rx_buf, sizeof(uart1_rx_buf), 500);
         if (ret < 0) {
                 LOG_ERR("uart_rx_enable failed: %d", ret);
                 return -1;
         }
-        
         LOG_INF("UART1 initialized successfully");
+        //I2C初始化
+        if (!device_is_ready(i2c_dev)) 
+        {                        
+                LOG_ERR("I2C device not ready");
+                return -1;
+        }
+        if (i2c_target_register(i2c_dev, &user_target_config) < 0) 
+        {
+		printk("Failed to register target\n");
+		return -1;
+	}
+        
 
+        uint8_t i2c_sendbuff[5]={0,1,2,3,4};
         // gpio_pin_set_dt(&led1_struct,1);
         gpio_pin_set_dt(&led_struct,1);
         while (1)
         {
-                // int logical_state = gpio_pin_get_dt(&button_struct);
-                // int physical_state = gpio_pin_get_raw(button_struct.port, button_struct.pin);
-                // LOG_INF("logical=%d, physical=%d\n", logical_state, physical_state);
-                //printk("button_struct.pin=%d\n",button_struct.pin);
-                k_sleep(K_MSEC(100));
+                i2c_write(i2c_dev,i2c_sendbuff,5,user_target_config.address);
+
+                k_sleep(K_MSEC(1000));
                 if(int_flag==1)
                 {
                         int_flag=0;
