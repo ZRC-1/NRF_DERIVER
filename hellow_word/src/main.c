@@ -4,6 +4,7 @@
 #include <zephyr/drivers/uart.h>
 #include <zephyr/drivers/i2c.h>
 #include <strings.h>
+#include <autoconf.h>
 
 #define BUTTON_NODE DT_ALIAS(user_key_1)
 //#define BUTTON_NODE  DT_NODELABEL(button0)
@@ -19,10 +20,10 @@ static struct gpio_callback button_callback_struct;
 
 uint8_t int_flag = 0;
 uint8_t uart1_rx_buf[128] = {0};    // 接收缓冲区
-uint8_t uart1_tx_buf[128] = {0};    // 发送缓冲区，独立存储
-bool tx_busy = false;               // 发送忙标志
+uint8_t uart1_tx_buf[128] = {0};    // 发送缓冲区
+bool tx_busy = false;               // 鍙戦€佸繖鏍囧織
 
-///配置i2c
+/// 配置 I2C
 #define I2C_NODE DT_ALIAS(user_i2c)
 static const struct device *const i2c_dev = DEVICE_DT_GET(I2C_NODE);
 static char last_byte;
@@ -69,11 +70,11 @@ static const struct i2c_target_callbacks sample_target_callbacks = {
 };
 
 static struct i2c_target_config user_target_config = {
-	.address = 0x12,
+	.address = 0x12,        
 	.callbacks = &sample_target_callbacks,
 };
 
-//配置串口
+// 配置串口
 #define UART1_NODE DT_ALIAS(uart1_use_protocol)
 static const struct device *const uart1_dev = DEVICE_DT_GET(UART1_NODE);
 
@@ -81,16 +82,16 @@ void UART1_CALLBACK(const struct device *dev, struct uart_event *evt, void *user
 {
         switch (evt->type) {
         case UART_RX_RDY:
-                // RX超时触发，复制数据到发送缓冲区并发送
+                // RX 超时触发，拷贝数据到发送缓冲区并发送
                 if (evt->data.rx.len > 0 && !tx_busy) 
                 {
                         LOG_INF("RX timeout: %d bytes, sending back", evt->data.rx.len);
                         
-                        // 复制数据到发送缓冲区
+                        // 拷贝数据到发送缓冲区
                         memcpy(uart1_tx_buf, &evt->data.rx.buf[evt->data.rx.offset], 
-                               evt->data.rx.len);
+                               evt->data.rx.len);    
                         
-                        // 发送数据
+                        // 鍙戦€佹暟鎹�
                         tx_busy = true;
                         uart_tx(dev, uart1_tx_buf, evt->data.rx.len, SYS_FOREVER_MS);
                 }
@@ -107,7 +108,7 @@ void UART1_CALLBACK(const struct device *dev, struct uart_event *evt, void *user
                 break;
 
         case UART_TX_DONE:
-                // 发送完成，清空缓冲区并重启接收
+                 // 发送完成，清空缓冲区并重新开启接收
                 LOG_DBG("TX done: %d bytes", evt->data.tx.len);
                 tx_busy = false;
                 memset(uart1_rx_buf, 0, sizeof(uart1_rx_buf));
@@ -116,7 +117,7 @@ void UART1_CALLBACK(const struct device *dev, struct uart_event *evt, void *user
                 break;
 
         case UART_TX_ABORTED:
-                // 发送中止
+                // 发送被中止
                 LOG_WRN("TX aborted");
                 break;
 
@@ -178,7 +179,7 @@ int main(void)
         {
                 LOG_ERR("button_int_add_failed");
         }
-        //串口初始化
+         // 串口初始化
         if (!device_is_ready(uart1_dev)) {
                 LOG_ERR("UART device not ready");
                 return -1;
@@ -195,27 +196,34 @@ int main(void)
                 return -1;
         }
         LOG_INF("UART1 initialized successfully");
-        //I2C初始化
+          // I2C 初始化
         if (!device_is_ready(i2c_dev)) 
         {                        
                 LOG_ERR("I2C device not ready");
                 return -1;
         }
-        if (i2c_target_register(i2c_dev, &user_target_config) < 0) 
-        {
-		printk("Failed to register target\n");
-		return -1;
-	}
-        
+        LOG_INF("I2C device ready");
+        // ret = i2c_target_register(i2c_dev, &user_target_config);
+        // if (ret < 0) 
+        // {
+	// 	LOG_ERR("Failed to register I2C target: %d", ret);
+	// 	return -1;
+	// }
+        // LOG_INF("I2C target registered at address 0x%02x", user_target_config.address);
 
         uint8_t i2c_sendbuff[5]={0,1,2,3,4};
         // gpio_pin_set_dt(&led1_struct,1);
         gpio_pin_set_dt(&led_struct,1);
         while (1)
         {
-                i2c_write(i2c_dev,i2c_sendbuff,5,user_target_config.address);
-
+                LOG_INF("I2C data sent: 0x%02x 0x%02x 0x%02x 0x%02x 0x%02x", i2c_sendbuff[0], i2c_sendbuff[1], i2c_sendbuff[2], i2c_sendbuff[3], i2c_sendbuff[4]);
+                ret=i2c_write(i2c_dev,i2c_sendbuff,5,user_target_config.address);
+                if(ret<0)
+                {
+                        LOG_ERR("I2C write failed: %d", ret);
+                }
                 k_sleep(K_MSEC(1000));
+                
                 if(int_flag==1)
                 {
                         int_flag=0;

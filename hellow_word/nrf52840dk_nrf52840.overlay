@@ -164,3 +164,7 @@
 				<NRF_PSEL(SPIM_MOSI, 1, 13)>;
 	};
 };
+
+&wdt {
+	status = "disabled";
+};
